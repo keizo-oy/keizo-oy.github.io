@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Keizo — Bug Bounty Services</title>
+<meta name="description" content="Keizo Oy — independent bug bounty and offensive security services. We find what others miss." />
+<style>
+  /* ============ THEME ============ */
+  :root{
+    --black:#050608;
+    --void:#0a0c11;
+    --steel:#12151c;
+    --steel-2:#171b24;
+    --silver:#c7ced8;
+    --silver-dim:#8b94a2;
+    --gray:#565d6b;
+    --gold:#d9b25e;
+    --gold-bright:#f4d489;
+    --gold-deep:#8a6a26;
+    --blue:#3d7bd0;
+    --blue-bright:#6aa6ff;
+    --blue-deep:#16335e;
+    --line:rgba(199,206,216,.10);
+    --line-strong:rgba(199,206,216,.22);
+    --glow-gold:rgba(217,178,94,.18);
+    --glow-blue:rgba(61,123,208,.22);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--black);
+    color:var(--silver);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+    font-size:16px;line-height:1.6;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+    position:relative;
+    min-height:100vh;
+  }
+  a{color:inherit;text-decoration:none}
+  ::selection{background:var(--gold);color:#000}
+
+  /* monospace accent */
+  .mono{font-family:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+
+  /* ============ BACKGROUND LAYERS ============ */
+  #matrix{
+    position:fixed;inset:0;z-index:0;
+    opacity:.32;
+    pointer-events:none;
+  }
+  /* mouse-follow metallic glow */
+  #cursorglow{
+    position:fixed;
+    width:780px;height:780px;
+    left:0;top:0;
+    border-radius:50%;
+    transform:translate(-50%,-50%);
+    background:radial-gradient(circle, var(--glow-blue) 0%, rgba(61,123,208,.06) 28%, transparent 60%);
+    pointer-events:none;
+    z-index:1;
+    mix-blend-mode:screen;
+    transition:opacity .4s ease;
+    will-change:transform;
+  }
+  /* brushed-metal grain + vignette */
+  body::before{
+    content:"";
+    position:fixed;inset:0;z-index:2;pointer-events:none;
+    background:
+      radial-gradient(1200px 700px at 80% -10%, rgba(61,123,208,.10), transparent 60%),
+      radial-gradient(900px 600px at 10% 110%, rgba(217,178,94,.07), transparent 55%),
+      linear-gradient(180deg, rgba(5,6,8,.2) 0%, rgba(5,6,8,.65) 60%, rgba(5,6,8,.92) 100%);
+  }
+  /* scanline texture */
+  body::after{
+    content:"";position:fixed;inset:0;z-index:3;pointer-events:none;
+    background:repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px);
+    opacity:.6;
+  }
+
+  /* ============ NAV ============ */
+  nav{
+    position:fixed;top:0;left:0;right:0;z-index:50;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 40px;
+    backdrop-filter:blur(10px);
+    background:linear-gradient(180deg, rgba(5,6,8,.85), rgba(5,6,8,.25));
+    border-bottom:1px solid var(--line);
+    transition:padding .3s ease, background .3s ease;
+  }
+  nav.scrolled{padding:12px 40px;background:rgba(5,6,8,.92)}
+  .brand{display:flex;align-items:center;gap:12px;font-weight:700;letter-spacing:.04em}
+  .brand .mark{
+    width:30px;height:30px;border-radius:7px;
+    background:
+      linear-gradient(135deg,var(--gold-bright),var(--gold-deep) 55%,#3a2c0e);
+    display:grid;place-items:center;
+    color:#0a0c11;font-weight:800;
+    box-shadow:0 0 0 1px rgba(217,178,94,.4), 0 6px 22px rgba(217,178,94,.18);
+  }
+  .brand .mark svg{width:18px;height:18px}
+  .brand b{font-size:1.05rem;color:var(--silver)}
+  .brand span{color:var(--gold);font-weight:400}
+  .nav-links{display:flex;gap:34px;align-items:center}
+  .nav-links a{color:var(--silver-dim);font-size:.9rem;letter-spacing:.04em;transition:color .2s}
+  .nav-links a:hover{color:var(--gold-bright)}
+  .nav-cta{
+    border:1px solid var(--gold-deep);
+    color:var(--gold-bright);
+    padding:8px 18px;border-radius:6px;
+    font-size:.82rem;letter-spacing:.08em;text-transform:uppercase;
+    background:linear-gradient(180deg, rgba(217,178,94,.06), transparent);
+    transition:all .2s;
+  }
+  .nav-cta:hover{background:var(--gold);color:#0a0c11;box-shadow:0 0 24px var(--glow-gold)}
+
+  /* ============ LAYOUT WRAP ============ */
+  .wrap{position:relative;z-index:5}
+
+  /* ============ HERO ============ */
+  header.hero{
+    min-height:100vh;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:140px 40px 80px;
+    position:relative;
+  }
+  .hero-grid{
+    max-width:1180px;margin:0 auto;width:100%;
+    display:grid;grid-template-columns:1.15fr .85fr;gap:60px;align-items:center;
+  }
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:10px;
+    font-size:.76rem;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--silver-dim);
+    padding:7px 14px;border:1px solid var(--line-strong);border-radius:40px;
+    background:rgba(18,21,28,.6);
+    margin-bottom:28px;
+  }
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);
+    box-shadow:0 0 10px var(--gold);animation:pulse 2.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  h1.title{
+    font-size:clamp(2.6rem,6vw,5.2rem);
+    line-height:.98;font-weight:800;letter-spacing:-.02em;
+    color:var(--silver);
+    margin-bottom:24px;
+  }
+  /* glitch target */
+  .glitch{position:relative;display:inline-block;color:#eef2f7}
+  .glitch::before,.glitch::after{
+    content:attr(data-text);position:absolute;left:0;top:0;width:100%;
+    overflow:hidden;clip-path:inset(0 0 0 0);
+  }
+  .glitch::before{color:var(--blue-bright);transform:translate(-2px,0);
+    animation:gl1 4.2s infinite linear alternate}
+  .glitch::after{color:var(--gold-bright);transform:translate(2px,0);
+    animation:gl2 3.4s infinite linear alternate}
+  @keyframes gl1{
+    0%,92%,100%{clip-path:inset(0 0 100% 0);transform:translate(0,0)}
+    93%{clip-path:inset(10% 0 60% 0);transform:translate(-3px,-1px)}
+    96%{clip-path:inset(60% 0 20% 0);transform:translate(3px,1px)}
+  }
+  @keyframes gl2{
+    0%,90%,100%{clip-path:inset(100% 0 0 0);transform:translate(0,0)}
+    91%{clip-path:inset(20% 0 50% 0);transform:translate(3px,1px)}
+    94%{clip-path:inset(70% 0 10% 0);transform:translate(-3px,-1px)}
+  }
+
+  .lede{
+    font-size:1.12rem;color:var(--silver-dim);max-width:540px;margin-bottom:38px;
+  }
+  .hero-cta{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .btn{
+    display:inline-flex;align-items:center;gap:10px;
+    padding:14px 26px;border-radius:7px;font-weight:600;
+    font-size:.92rem;letter-spacing:.04em;cursor:pointer;
+    transition:all .22s ease;
+  }
+  .btn.primary{
+    background:linear-gradient(135deg,var(--gold-bright),var(--gold) 45%,var(--gold-deep));
+    color:#0a0c11;
+    box-shadow:0 0 0 1px rgba(217,178,94,.5),0 10px 30px rgba(217,178,94,.18);
+  }
+  .btn.primary:hover{transform:translateY(-2px);box-shadow:0 0 0 1px var(--gold),0 16px 40px rgba(217,178,94,.35)}
+  .btn.ghost{border:1px solid var(--line-strong);color:var(--silver)}
+  .btn.ghost:hover{border-color:var(--blue-bright);color:var(--blue-bright);box-shadow:0 0 24px var(--glow-blue)}
+
+  /* terminal card */
+  .terminal{
+    background:linear-gradient(180deg,var(--steel-2),var(--void));
+    border:1px solid var(--line-strong);
+    border-radius:12px;
+    overflow:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.02) inset;
+    font-size:.84rem;
+    backdrop-filter:blur(2px);
+  }
+  .terminal .bar{
+    display:flex;align-items:center;gap:8px;
+    padding:11px 14px;border-bottom:1px solid var(--line);
+    background:rgba(0,0,0,.3);
+  }
+  .terminal .bar i{width:11px;height:11px;border-radius:50%;display:block}
+  .t-r{background:#ff5f57}.t-y{background:#febc2e}.t-g{background:#28c840}
+  .terminal .bar .title-t{margin-left:8px;color:var(--gray);font-size:.72rem;letter-spacing:.08em}
+  .terminal pre{
+    padding:20px 22px;color:var(--silver-dim);
+    font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+    white-space:pre-wrap;line-height:1.7;min-height:300px;
+  }
+  .terminal .c-prompt{color:var(--gold)}
+  .terminal .c-ok{color:#5fd38a}
+  .terminal .c-err{color:#ff6b6b}
+  .terminal .c-blue{color:var(--blue-bright)}
+  .terminal .c-dim{color:var(--gray)}
+  .cursor{display:inline-block;width:8px;height:15px;background:var(--gold-bright);
+    vertical-align:middle;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* scroll hint */
+  .scroll-hint{
+    position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
+    color:var(--gray);font-size:.7rem;letter-spacing:.3em;text-transform:uppercase;
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+  }
+  .scroll-hint .line{width:1px;height:38px;background:linear-gradient(var(--silver-dim),transparent);
+    animation:scrollline 2s infinite}
+  @keyframes scrollline{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}100%{transform:scaleY(0);transform-origin:bottom}}
+
+  /* ============ MARQUEE ============ */
+  .marquee{
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(10,12,17,.9),rgba(5,6,8,.9));
+    overflow:hidden;white-space:nowrap;padding:16px 0;
+    position:relative;z-index:5;
+  }
+  .marquee .track{display:inline-block;animation:marq 26s linear infinite}
+  .marquee span{
+    font-family:'JetBrains Mono',monospace;
+    color:var(--gray);font-size:.82rem;letter-spacing:.18em;
+    margin:0 30px;text-transform:uppercase;
+  }
+  .marquee .hot{color:var(--gold)}
+  @keyframes marq{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+  /* ============ SECTION GENERIC ============ */
+  section{padding:90px 40px;position:relative;z-index:5}
+  .container{max-width:1180px;margin:0 auto}
+  .sec-label{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+  .sec-label .num{color:var(--gold);font-family:'JetBrains Mono',monospace;font-size:.8rem;letter-spacing:.15em}
+  .sec-label .rule{flex:1;height:1px;background:var(--line-strong);max-width:80px}
+  h2{font-size:clamp(1.9rem,3.4vw,2.8rem);font-weight:700;color:var(--silver);
+    letter-spacing:-.01em;line-height:1.1;margin-bottom:22px}
+  .sec-sub{color:var(--silver-dim);max-width:640px;font-size:1.05rem}
+
+  /* ============ SERVICES ============ */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:54px}
+  .card{
+    position:relative;
+    background:linear-gradient(180deg,var(--steel-2),var(--void));
+    border:1px solid var(--line);border-radius:12px;
+    padding:30px 28px;overflow:hidden;
+    transition:transform .25s ease,border-color .25s ease;
+  }
+  .card::before{
+    content:"";position:absolute;inset:0;border-radius:12px;padding:1px;
+    background:linear-gradient(135deg,rgba(217,178,94,.5),transparent 40%,transparent 60%,rgba(61,123,208,.4));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;
+    mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    mask-composite:exclude;
+    opacity:0;transition:opacity .3s;
+  }
+  .card:hover{transform:translateY(-6px);border-color:transparent}
+  .card:hover::before{opacity:1}
+  .card .ico{
+    width:46px;height:46px;border-radius:10px;display:grid;place-items:center;
+    background:rgba(61,123,208,.1);border:1px solid rgba(61,123,208,.3);
+    color:var(--blue-bright);margin-bottom:20px;
+  }
+  .card h3{color:var(--silver);font-size:1.2rem;margin-bottom:10px;font-weight:600}
+  .card p{color:var(--silver-dim);font-size:.94rem}
+  .card .tag{position:absolute;top:18px;right:18px;font-family:'JetBrains Mono',monospace;
+    font-size:.66rem;color:var(--gray);letter-spacing:.1em}
+
+  /* ============ STATS ============ */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:50px}
+  .stat{
+    border-left:2px solid var(--gold-deep);padding:6px 0 6px 20px;
+  }
+  .stat .big{
+    font-size:2.4rem;font-weight:800;
+    background:linear-gradient(180deg,var(--silver),var(--silver-dim));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    line-height:1;
+  }
+  .stat .lbl{color:var(--gray);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;margin-top:8px}
+
+  /* ============ CONTACT / CTA ============ */
+  .contact{padding-bottom:80px}
+  .cta-box{
+    margin-top:50px;
+    border:1px solid var(--line-strong);border-radius:16px;overflow:hidden;
+    background:linear-gradient(135deg,rgba(18,21,28,.95),rgba(10,12,17,.95));
+    display:grid;grid-template-columns:1.2fr .8fr;
+    position:relative;
+  }
+  .cta-box::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(600px 300px at 90% -20%,var(--glow-blue),transparent 60%);
+  }
+  .cta-left{padding:54px}
+  .cta-left h2{margin-bottom:18px}
+  .cta-left p{color:var(--silver-dim);margin-bottom:30px;max-width:480px}
+  .cta-right{
+    border-left:1px solid var(--line);
+    padding:54px;display:flex;flex-direction:column;justify-content:center;gap:22px;
+    background:rgba(0,0,0,.25);
+  }
+  .field-label{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--gray);
+    letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px}
+  .field-val{color:var(--silver);font-size:1.05rem}
+  .field-val a:hover{color:var(--gold-bright)}
+  .pulse-row{display:flex;align-items:center;gap:10px;color:#5fd38a;font-size:.78rem;font-family:'JetBrains Mono',monospace}
+
+  /* ============ FOOTER ============ */
+  footer{
+    border-top:1px solid var(--line);
+    padding:34px 40px;
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;
+    position:relative;z-index:5;
+    background:rgba(5,6,8,.6);
+  }
+  footer .small{color:var(--gray);font-size:.78rem}
+  footer .small b{color:var(--silver-dim)}
+
+  /* ============ REVEAL ANIM ============ */
+  .reveal{opacity:0;transform:translateY(28px);transition:opacity .8s ease,transform .8s ease}
+  .reveal.in{opacity:1;transform:none}
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width:900px){
+    nav{padding:14px 20px}
+    .nav-links{display:none}
+    .nav-cta{display:inline-flex}
+    header.hero{padding:120px 20px 60px}
+    .hero-grid{grid-template-columns:1fr;gap:40px}
+    section{padding:80px 20px}
+    .cards,.stats{grid-template-columns:1fr 1fr}
+    .cta-box{grid-template-columns:1fr}
+    .cta-right{border-left:none;border-top:1px solid var(--line);padding:36px}
+    .cta-left{padding:36px}
+    .terminal pre{min-height:auto}
+  }
+  @media (max-width:560px){
+    .cards,.stats{grid-template-columns:1fr}
+    .stats{grid-template-columns:1fr 1fr}
+  }
+</style>
+</head>
+<body>
+
+<canvas id="matrix"></canvas>
+<div id="cursorglow"></div>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#0a0c11" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z"/>
+        <path d="M9.5 12.5 11 14l3.5-4"/>
+      </svg>
+    </span>
+    <b>keizo<span>.fi</span></b>
+  </div>
+  <div class="nav-links">
+    <a href="#services">What we do</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="hero-grid">
+      <div class="reveal in">
+        <div class="eyebrow"><span class="dot"></span> Keizo Oy &nbsp;//&nbsp; Bug Bounty Hunters</div>
+        <h1 class="title">
+          We hunt the bugs<br>
+          <span class="glitch" data-text="others miss.">others miss.</span>
+        </h1>
+        <p class="lede">
+          Keizo Oy is an independent <b style="color:var(--silver)">bug bounty hunting</b> team.
+          We research, exploit and responsibly disclose vulnerabilities across public and
+          private bounty programs — finding what automated scanners and casual testers overlook.
+        </p>
+        <div class="hero-cta">
+          <a href="#services" class="btn primary">See what we do
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="reveal in">
+        <div class="terminal">
+          <div class="bar">
+            <i class="t-r"></i><i class="t-y"></i><i class="t-g"></i>
+            <span class="title-t mono">root@keizo:~/engagement</span>
+          </div>
+          <pre id="term-out"></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="scroll-hint mono">
+      <span>scroll</span>
+      <span class="line"></span>
+    </div>
+  </header>
+
+  <!-- MARQUEE -->
+  <div class="marquee" aria-hidden="true">
+    <div class="track" id="marq"></div>
+  </div>
+
+  <!-- SERVICES -->
+  <section id="services">
+    <div class="container">
+      <div class="sec-label reveal"><span class="num">01 //</span><span class="rule"></span> WHAT WE DO</div>
+      <h2 class="reveal">Professional bug bounty hunting.</h2>
+      <p class="sec-sub reveal">We dig into bounty programs the way skilled adversaries would — manually, creatively, and with patience. Here's the shape of the work.</p>
+
+      <div class="cards">
+        <div class="card reveal">
+          <span class="tag mono">01</span>
+          <div class="ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          </div>
+          <h3>Recon &amp; Research</h3>
+          <p>We map the attack surface and go deep where automated scanners stop looking.</p>
+        </div>
+        <div class="card reveal">
+          <span class="tag mono">02</span>
+          <div class="ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-3 7h5l-3 7"/><path d="M5 14a7 7 0 1 1 14 0"/></svg>
+          </div>
+          <h3>Exploitation</h3>
+          <p>Manual, creative attacks that chain weaknesses into real, demonstrable impact.</p>
+        </div>
+        <div class="card reveal">
+          <span class="tag mono">03</span>
+          <div class="ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <h3>Responsible Disclosure</h3>
+          <p>Clean, reproducible reports — coordinated quietly with every program we hunt.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="small">© <span id="year"></span> <b>Keizo Oy</b> — operating <b>keizo</b>. All rights reserved.</div>
+    <div class="small mono">// stay paranoid</div>
+  </footer>
+
+</div>
+
+<script>
+/* ===== YEAR ===== */
+document.getElementById('year').textContent = new Date().getFullYear();
+
+/* ===== NAV SCROLL STATE ===== */
+const nav=document.getElementById('nav');
+addEventListener('scroll',()=>{nav.classList.toggle('scrolled',scrollY>30)});
+
+/* ===== MOUSE GLOW ===== */
+const glow=document.getElementById('cursorglow');
+let gx=innerWidth/2, gy=innerHeight/2, cx=gx, cy=gy;
+addEventListener('pointermove',e=>{gx=e.clientX;gy=e.clientY});
+(function loop(){cx+=(gx-cx)*.12;cy+=(gy-cy)*.12;glow.style.transform=`translate(${cx}px,${cy}px) translate(-50%,-50%)`;requestAnimationFrame(loop)})();
+
+/* ===== MATRIX RAIN ===== */
+const cv=document.getElementById('matrix'), ctx=cv.getContext('2d');
+let cols,drops;
+function resize(){cv.width=innerWidth;cv.height=innerHeight;
+  cols=Math.floor(cv.width/16);drops=Array(cols).fill(1).map(()=>Math.random()*-cv.height);}
+resize();addEventListener('resize',resize);
+const glyphs='01アカサタナハマヤラ<>{}[]/\\#$%&*+=01';
+function rain(){
+  ctx.fillStyle='rgba(5,6,8,0.08)';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.font='14px monospace';
+  for(let i=0;i<cols;i++){
+    const ch=glyphs[Math.floor(Math.random()*glyphs.length)];
+    const x=i*16,y=drops[i];
+    // tint occasional glyphs gold/blue
+    if(Math.random()<0.02) ctx.fillStyle='rgba(217,178,94,.9)';
+    else if(Math.random()<0.03) ctx.fillStyle='rgba(106,166,255,.7)';
+    else ctx.fillStyle='rgba(120,200,140,.55)';
+    ctx.fillText(ch,x,y);
+    drops[i]=y>cv.height&&Math.random()>0.975?0:y+16;
+  }
+  requestAnimationFrame(rain);
+}
+rain();
+
+/* ===== MARQUEE CONTENT ===== */
+const marq=document.getElementById('marq');
+const tags=['CVE_FEED','RECON','EXPLOIT_DEV','TRIAGE','CVE_FEED','COORDINATED_DISCLOSURE','0DAY','PATCH_VERIFICATION',
+'RECON','EXPLOIT_DEV','TRIAGE','COORDINATED_DISCLOSURE','0DAY','PATCH_VERIFICATION'];
+marq.innerHTML=tags.map((t,i)=>`<span class="${i%4===0?'hot':''}">// ${t}</span>`).join('');
+
+/* ===== TERMINAL TYPING ===== */
+const lines=[
+  ['prompt','root@keizo:~# '],['cmd','./scan --target customer.example --deep'],['dim',''],
+  ['blue','[*] mapping attack surface...'],['blue','[*] 1,204 hosts · 38 services enumerated'],['dim',''],
+  ['ok','[+] AUTH bypass discovered  /api/v2/admin'],['ok','[+] IDOR → tenant data exposure'],['err','[!] stored XSS in profile handler'],['ok','[+] SSRF via webhook callback'],['dim',''],
+  ['prompt','root@keizo:~# '],['cmd','./triage --verify --dedupe'],['dim',''],
+  ['ok','[✓] 4 findings confirmed · 0 false positives'],['blue','[*] advisory drafted · disclosing responsibly'],['dim',''],
+  ['prompt','root@keizo:~# '],['cmd','']
+];
+const termOut=document.getElementById('term-out');
+let li=0,ci=0,current=document.createElement('span');
+function colorFor(t){
+  return {prompt:'c-prompt',cmd:'',ok:'c-ok',err:'c-err',blue:'c-blue',dim:'c-dim'}[t]||'';
+}
+function typeNext(){
+  if(li>=lines.length){li=0;termOut.innerHTML='';}
+  const [type,text]=lines[li];
+  if(ci===0){
+    current=document.createElement('span');current.className=colorFor(type);
+    termOut.appendChild(current);
+    if(type==='dim'){current.innerHTML='<br>';li++;ci=0;setTimeout(typeNext,90);return;}
+  }
+  if(ci<=text.length){
+    current.textContent=text.slice(0,ci);
+    // cursor
+    let cur=termOut.querySelector('.cursor');if(cur)cur.remove();
+    const c=document.createElement('span');c.className='cursor';termOut.appendChild(c);
+    termOut.scrollTop=termOut.scrollHeight;
+    ci++;setTimeout(typeNext, type==='prompt'?0:28+Math.random()*40);
+  }else{
+    termOut.appendChild(document.createElement('br'));
+    li++;ci=0;setTimeout(typeNext, type==='cmd'?600:220);
+  }
+}
+typeNext();
+
+/* ===== SCROLL REVEAL ===== */
+const io=new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}});
+},{threshold:.15});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+/* ===== COUNT-UP STATS ===== */
+const sio=new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(!e.isIntersecting)return;
+    e.target.querySelectorAll('.big').forEach(b=>{
+      const target=+b.dataset.count;let n=0;
+      const step=()=>{n+=Math.max(1,Math.ceil(target/40));if(n>=target){b.textContent=target+(target>=100?'':'');return;}b.textContent=n;requestAnimationFrame(step);};
+      step();
+    });
+    sio.unobserve(e.target);
+  });
+},{threshold:.4});
+document.querySelectorAll('#stats').forEach(s=>sio.observe(s));
+</script>
+</body>
+</html>
